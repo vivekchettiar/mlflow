@@ -323,10 +323,9 @@ def save_model(
     )
 
     conda_env_subpath = "conda.yaml"
-    
-    conda_env = get_default_conda_env()
-
-    if not isinstance(conda_env, dict):
+    if conda_env is None:
+        conda_env = get_default_conda_env()
+    elif not isinstance(conda_env, dict):
         with open(conda_env, "r") as f:
             conda_env = yaml.safe_load(f)
 
