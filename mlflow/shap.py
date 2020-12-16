@@ -229,10 +229,11 @@ def log_explainer(
     await_registration_for=DEFAULT_AWAIT_MAX_SLEEP_SECONDS,
 ):
     """
-    Log an ONNX model as an MLflow artifact for the current run.
+    Log an SHAP explainer as an MLflow artifact for the current run.
 
-    :param onnx_model: ONNX model to be saved.
+    :param onnx_model: SHAP explainer to be saved.
     :param artifact_path: Run-relative artifact path.
+    :param model_uri: Optional (already logged) model for the explainer to run. If this is not provided, default SHAP serialization is used
     :param conda_env: Either a dictionary representation of a Conda environment or the path to a
                       Conda environment yaml file. If provided, this decsribes the environment
                       this model should be run in. At minimum, it should specify the dependencies
@@ -246,8 +247,7 @@ def log_explainer(
                             'channels': ['defaults'],
                             'dependencies': [
                                 'python=3.6.0',
-                                'onnx=1.4.1',
-                                'onnxruntime=0.3.0'
+                                'shap=0.37.0'
                             ]
                         }
     :param registered_model_name: (Experimental) If given, create a model version under
@@ -358,6 +358,8 @@ def save_model(
     mlflow_model.save(os.path.join(path, MLMODEL_FILE_NAME))
 
 def _merge_environments(shap_environment, model_environment):
+    """
+    """
     
     merged_conda_channels = list(set(shap_environment['channels'] + model_environment['channels']))
     merged_conda_deps = set()
