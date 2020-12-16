@@ -221,6 +221,7 @@ def log_explanation(predict_function, features, artifact_path=None):
 def log_explainer(
     explainer,
     artifact_path,
+    model_uri = None,
     conda_env=None,
     registered_model_name=None,
     signature: ModelSignature = None,
@@ -279,6 +280,7 @@ def log_explainer(
     Model.log(
         artifact_path=artifact_path,
         flavor=mlflow.shap,
+        model_uri = model_uri,
         explainer=explainer,
         conda_env=conda_env,
         registered_model_name=registered_model_name,
@@ -292,6 +294,7 @@ def log_explainer(
 def save_model(
     explainer,
     path,
+    model_uri = None,
     conda_env=None,
     mlflow_model=None,
     signature: ModelSignature = None,
@@ -320,28 +323,68 @@ def save_model(
     )
 
     conda_env_subpath = "conda.yaml"
-    if conda_env is None:
-        conda_env = get_default_conda_env()
-    elif not isinstance(conda_env, dict):
+    
+    conda_env = get_default_conda_env()
+
+    if not isinstance(conda_env, dict):
         with open(conda_env, "r") as f:
             conda_env = yaml.safe_load(f)
+
+    if model_uri is not None:
+        local_model_path = _download_artifact_from_uri(artifact_uri=model_uri)
+        local_model_conda_path = os.path.join(local_model_path, 'conda.yaml')
+        local_model_conda_file = open(local_model_conda_path, 'r')
+        model_conda_env = yaml.safe_load(local_model_conda_file)
+        conda_env = _merge_environments(conda_env, model_conda_env)
+    
     with open(os.path.join(path, conda_env_subpath), "w") as f:
         yaml.safe_dump(conda_env, stream=f, default_flow_style=False)
-
+    
     pyfunc.add_to_model(
         mlflow_model,
         loader_module="mlflow.shap",
         model_path=explainer_data_subpath,
-        env=conda_env_subpath
+        env=conda_env_subpath,
+        model_uri = model_uri
     )
 
     mlflow_model.add_flavor(
         FLAVOR_NAME,
         shap_version=shap.__version__,
-        serialized_explainer=explainer_data_subpath
+        serialized_explainer=explainer_data_subpath,
+        model_uri = model_uri
     )
 
     mlflow_model.save(os.path.join(path, MLMODEL_FILE_NAME))
+
+def _merge_environments(shap_environment, model_environment):
+    
+    merged_conda_channels = list(set(shap_environment['channels'] + model_environment['channels']))
+    merged_conda_deps = set()
+    merged_pip_deps = set()
+
+    for dependency in shap_environment['dependencies']:
+        if isinstance(dependency, dict) and dependency['pip']:
+            for pip_dependency in dependency['pip']:
+                merged_pip_deps.add(pip_dependency)
+        else:
+            merged_conda_deps.add(dependency)
+
+    for dependency in model_environment['dependencies']:
+        if isinstance(dependency, dict) and dependency['pip']:
+            for pip_dependency in dependency['pip']:
+                merged_pip_deps.add(pip_dependency)
+        else :
+            merged_conda_deps.add(dependency)
+
+    merged_conda_deps = list(merged_conda_deps)
+    merged_pip_deps = list(merged_pip_deps)
+    
+    return _mlflow_conda_env(
+        additional_conda_deps=merged_conda_deps,
+        additional_pip_deps=merged_pip_deps,
+        additional_conda_channels=merged_conda_channels
+    )
 
 @experimental
 def _save_model(explainer, output_path):
@@ -363,21 +406,35 @@ def load_explainer(model_uri):
     local_explainer_path = _download_artifact_from_uri(artifact_uri=model_uri)
     flavor_conf = _get_flavor_configuration(model_path=local_explainer_path, flavor_name=FLAVOR_NAME)
     shap_explainer_artifacts_path = os.path.join(local_explainer_path, flavor_conf["serialized_explainer"])
-    return _load_explainer(explainer_file=shap_explainer_artifacts_path)
+    model = None
+    model_uri = flavor_conf["model_uri"]
+    if model_uri is not None:
+        model = mlflow.pyfunc.load_model(model_uri)
+
+    return _load_explainer(explainer_file=shap_explainer_artifacts_path, model = model)
 
 
 @experimental
-def _load_explainer(explainer_file):
+def _load_explainer(explainer_file, model = None):
     """
     """
     with open(explainer_file, "rb") as explainer:
-        return shap.Explainer.load(explainer)
+        explainer = shap.Explainer.load(explainer)
+        if model is not None:
+            explainer.model = model.predict
+        return explainer
 
 class _SHAPWrapper:
     def __init__(self, path):
         flavor_conf = _get_flavor_configuration(model_path=path, flavor_name=FLAVOR_NAME)
         shap_explainer_artifacts_path = os.path.join(path, flavor_conf["serialized_explainer"])
-        self.explainer = _load_explainer(explainer_file=shap_explainer_artifacts_path)
+        
+        model = None
+        model_uri = flavor_conf["model_uri"]
+        if model_uri is not None:
+            model = mlflow.pyfunc.load_model(model_uri)
+        
+        self.explainer = _load_explainer(explainer_file=shap_explainer_artifacts_path, model=model)
 
     def predict(self, dataframe):
         return np.array(self.explainer(dataframe.values).values)
