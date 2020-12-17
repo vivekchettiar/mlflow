@@ -367,16 +367,20 @@ def _merge_environments(shap_environment, model_environment):
     for dependency in shap_environment['dependencies']:
         if isinstance(dependency, dict) and dependency['pip']:
             for pip_dependency in dependency['pip']:
-                merged_pip_deps.add(pip_dependency)
+                if pip_dependency != 'mlflow':
+                    merged_pip_deps.add(pip_dependency)
         else:
-            merged_conda_deps.add(dependency)
+            if dependency.split('=')[0] != 'python' and dependency.split('=')[0] != 'pip':
+                merged_conda_deps.add(dependency)
 
     for dependency in model_environment['dependencies']:
         if isinstance(dependency, dict) and dependency['pip']:
             for pip_dependency in dependency['pip']:
-                merged_pip_deps.add(pip_dependency)
+                if pip_dependency != 'mlflow':
+                    merged_pip_deps.add(pip_dependency)
         else :
-            merged_conda_deps.add(dependency)
+            if dependency.split('=')[0] != 'python' and dependency.split('=')[0] != 'pip':
+                merged_conda_deps.add(dependency)
 
     merged_conda_deps = list(merged_conda_deps)
     merged_pip_deps = list(merged_pip_deps)
