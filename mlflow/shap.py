@@ -340,7 +340,7 @@ def save_model(
             underlying_model_path = os.path.join(path, _UNDERLYING_MODEL_SUBPATH)
         
         if underlying_model_flavor == 'sklearn':
-            mlflow.sklearn.log_model(explainer.model.model.__self__, underlying_model_path)
+            mlflow.sklearn.save_model(explainer.model.model.__self__, underlying_model_path)
     
     # saving the explainer object
     explainer_data_subpath = "explainer.shap"
