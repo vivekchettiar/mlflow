@@ -36,6 +36,12 @@ _UNKNOWN_MODEL_FLAVOR = "unknown"
 _UNDERLYING_MODEL_SUBPATH = 'underlying_model'
 
 def get_underlying_model_flavor(model):
+    """
+    Find the underlying models flavor.
+
+    :param model: underlying model of the explainer.
+    """
+
     unwrapped_model = model.model
     if isinstance(unwrapped_model, types.FunctionType):
         return 'python_function'
@@ -243,9 +249,8 @@ def log_explainer(
     """
     Log an SHAP explainer as an MLflow artifact for the current run.
 
-    :param onnx_model: SHAP explainer to be saved.
+    :param explainer: SHAP explainer to be saved.
     :param artifact_path: Run-relative artifact path.
-    :param model_uri: Optional (already logged) model for the explainer to run. If this is not provided, default SHAP serialization is used
     :param conda_env: Either a dictionary representation of a Conda environment or the path to a
                       Conda environment yaml file. If provided, this decsribes the environment
                       this model should be run in. At minimum, it should specify the dependencies
@@ -289,6 +294,7 @@ def log_explainer(
                             waits for five minutes. Specify 0 or None to skip waiting.
 
     """
+
     Model.log(
         artifact_path=artifact_path,
         flavor=mlflow.shap,
@@ -313,7 +319,52 @@ def save_model(
     input_example: ModelInputExample = None,
 ):
     """
+    Save a SHAP explainer to a path on the local file system. Produces an MLflow Model
+    containing the following flavors:
+
+        - :py:mod:`mlflow.shap`
+        - :py:mod:`mlflow.pyfunc`
+
+    :param explainer: SHAP explainer to be saved.
+    :param path: Local path where the explainer is to be saved.
+    :param conda_env: Either a dictionary representation of a Conda environment or the path to a
+                      Conda environment yaml file. If provided, this decsribes the environment
+                      this model should be run in. At minimum, it should specify the dependencies
+                      contained in :func:`get_default_conda_env()`. If `None`, the default
+                      :func:`get_default_conda_env()` environment is added to the model.
+                      The following is an *example* dictionary representation of a Conda
+                      environment::
+
+                        {
+                            'name': 'mlflow-env',
+                            'channels': ['defaults'],
+                            'dependencies': [
+                                'python=3.6.0',
+                                'shap=0.37.0'
+                            ]
+                        }
+
+    :param mlflow_model: :py:mod:`mlflow.models.Model` this flavor is being added to.
+    :param signature: (Experimental) :py:class:`ModelSignature <mlflow.models.ModelSignature>`
+                      describes model input and output :py:class:`Schema <mlflow.types.Schema>`.
+                      The model signature can be :py:func:`inferred <mlflow.models.infer_signature>`
+                      from datasets with valid model input (e.g. the training dataset with target
+                      column omitted) and valid model output (e.g. model predictions generated on
+                      the training dataset), for example:
+
+                      .. code-block:: python
+
+                        from mlflow.models.signature import infer_signature
+                        train = df.drop_column("target_label")
+                        predictions = ... # compute model predictions
+                        signature = infer_signature(train, predictions)
+    :param input_example: (Experimental) Input example provides one or several instances of valid
+                          model input. The example can be used as a hint of what data to feed the
+                          model. The given example will be converted to a Pandas DataFrame and then
+                          serialized to json using the Pandas split-oriented format. Bytes are
+                          base64-encoded.
     """
+
     if os.path.exists(path):
         raise MlflowException(
             message="Path '{}' already exists".format(path), error_code=RESOURCE_ALREADY_EXISTS
@@ -384,6 +435,10 @@ def save_model(
 
 def _merge_environments(shap_environment, model_environment):
     """
+    Merge conda environments of underlying model and shap.
+
+    :param shap_environment: SHAP conda environment.
+    :param model_environment: Underlying model conda environment.
     """
     
     merged_conda_channels = list(set(shap_environment['channels'] + model_environment['channels']))
@@ -420,7 +475,24 @@ def _merge_environments(shap_environment, model_environment):
 @experimental
 def load_explainer(model_uri):
     """
+    Load a SHAP explainer from a local file or a run.
+
+    :param model_uri: The location, in URI format, of the MLflow model, for example:
+
+                      - ``/Users/me/path/to/local/model``
+                      - ``relative/path/to/local/model``
+                      - ``s3://my_bucket/path/to/model``
+                      - ``runs:/<mlflow_run_id>/run-relative/path/to/model``
+                      - ``models:/<model_name>/<model_version>``
+                      - ``models:/<model_name>/<stage>``
+
+                      For more information about supported URI schemes, see
+                      `Referencing Artifacts <https://www.mlflow.org/docs/latest/concepts.html#
+                      artifact-locations>`_.
+
+    :return: A SHAP explainer.
     """
+
     local_explainer_path = _download_artifact_from_uri(artifact_uri=model_uri)
     flavor_conf = _get_flavor_configuration(model_path=local_explainer_path, flavor_name=FLAVOR_NAME)
     shap_explainer_artifacts_path = os.path.join(local_explainer_path, flavor_conf["serialized_explainer"])
@@ -437,7 +509,12 @@ def load_explainer(model_uri):
 @experimental
 def _load_explainer(explainer_file, model = None):
     """
+    Load a SHAP explainer saved as an MLflow artifact on the local file system.
+
+    :param explainer_file: Local filesystem path to the MLflow Model saved with the ``shap`` flavor
+    :param model: model to override underlying explainer model.
     """
+
     with open(explainer_file, "rb") as explainer:
         explainer = shap.Explainer.load(explainer)
         if model is not None:
