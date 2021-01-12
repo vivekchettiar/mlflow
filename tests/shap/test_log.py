@@ -1,6 +1,5 @@
 import mlflow
 import shap
-import xgboost
 import pickle
 import numpy as np
 import sklearn
@@ -20,7 +19,7 @@ def get_sklearn_conda_env():
         additional_conda_channels=None,
     )
 
-def test_basic_log_explainer():
+def test_sklearn_log_explainer():
 
     with mlflow.start_run() as run:
 
@@ -33,7 +32,7 @@ def test_basic_log_explainer():
         explainer_original = shap.Explainer(model.predict, X, algorithm='permutation')
         shap_values_original = explainer_original(X[:5])
 
-        mlflow.shap.log_explainer(explainer_original, "test_explainer", conda_env = get_sklearn_conda_env())
+        mlflow.shap.log_explainer(explainer_original, "test_explainer")
 
         explainer_new = mlflow.shap.load_explainer("runs:/" + run_id + "/test_explainer")
         shap_values_new = explainer_new(X[:5])
@@ -43,7 +42,7 @@ def test_basic_log_explainer():
         assert type(explainer_original.masker) == type(explainer_new.masker)
 
 
-def test_basic_log_explainer_pyfunc():
+def test_sklearn_log_explainer_pyfunc():
 
     with mlflow.start_run() as run:
 
@@ -56,32 +55,9 @@ def test_basic_log_explainer_pyfunc():
         explainer_original = shap.Explainer(model.predict, X, algorithm='permutation')
         shap_values_original = explainer_original(X[:1])
 
-        mlflow.shap.log_explainer(explainer_original, "test_explainer", conda_env = get_sklearn_conda_env())
+        mlflow.shap.log_explainer(explainer_original, "test_explainer")
 
         explainer_pyfunc = mlflow.pyfunc.load_model("runs:/" + run_id + "/test_explainer")
         shap_values_new = explainer_pyfunc.predict(X[:1])
-        
-        assert shap_values_original.shape == shap_values_new.shape
-
-
-def test_custom_model_log_explainer_pyfunc():
-
-    with mlflow.start_run() as run:
-
-        run_id = run.info.run_id
-
-        X, y = shap.datasets.boston()
-        model = sklearn.ensemble.RandomForestRegressor(n_estimators=100)
-        model.fit(X, y)
-
-        mlflow.sklearn.log_model(model, 'sklearn_model')
-    
-        explainer_original = shap.Explainer(model.predict, X, algorithm='permutation')
-        shap_values_original = explainer_original(X[:1])
-
-        mlflow.shap.log_explainer(explainer_original, "test_explainer", model_uri = 'runs:/'+ run_id +'/sklearn_model')
-
-        explainer_new = mlflow.shap.load_explainer('runs:/'+ run_id +'/test_explainer')
-        shap_values_new = explainer_new(X[:1])
         
         assert shap_values_original.shape == shap_values_new.shape
