@@ -90,8 +90,7 @@ def test_sklearn_log_explainer_pyfunc():
         shap_values_new = explainer_pyfunc.predict(X[:2])
         
 
-        assert np.array_equal(shap_values_original.base_values, shap_values_new['base_values'])
-        assert shap_values_original.values.shape == shap_values_new['values'].shape
+        assert shap_values_original.values.shape == shap_values_new.shape
 
 def test_pytorch_log_explainer():
     """
@@ -150,4 +149,4 @@ def test_pytorch_log_explainer_pyfunc():
         explainer_pyfunc = mlflow.pyfunc.load_model("runs:/" + run_id + "/shap_explainer")
         shap_values_new = explainer_pyfunc.predict(pd.DataFrame(data=data)[0])
 
-        assert np.array_equal(shap_values_original[0].base_values, shap_values_new['base_values'][0])
+        assert shap_values_original.values.shape == shap_values_new.shape
