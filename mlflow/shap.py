@@ -7,6 +7,7 @@ import shap
 
 import numpy as np
 import sklearn
+import torch
 
 import mlflow
 import types
@@ -49,6 +50,8 @@ def get_underlying_model_flavor(model):
         model_object = unwrapped_model.__self__
         if issubclass(type(model_object), sklearn.base.BaseEstimator):
             return 'sklearn'
+    elif issubclass(type(unwrapped_model), torch.nn.Module):
+        return 'pytorch'
         # TODO: Add checks for other types of mlflow models
     return _UNKNOWN_MODEL_FLAVOR
 
@@ -392,6 +395,8 @@ def save_model(
         
         if underlying_model_flavor == 'sklearn':
             mlflow.sklearn.save_model(explainer.model.model.__self__, underlying_model_path)
+        elif underlying_model_flavor == 'pytorch':
+            mlflow.pytorch.save_model(explainer.model.model, underlying_model_path)
     
     # saving the explainer object
     explainer_data_subpath = "explainer.shap"
@@ -498,11 +503,14 @@ def load_explainer(model_uri):
     shap_explainer_artifacts_path = os.path.join(local_explainer_path, flavor_conf["serialized_explainer"])
     underlying_model_flavor = flavor_conf["underlying_model_flavor"]
     model = None
+    
     if underlying_model_flavor != _UNKNOWN_MODEL_FLAVOR:
         underlying_model_path = os.path.join(local_explainer_path, _UNDERLYING_MODEL_SUBPATH)
         if underlying_model_flavor == 'sklearn':
-            model = mlflow.sklearn._load_pyfunc(underlying_model_path)
-
+            model = mlflow.sklearn._load_pyfunc(underlying_model_path).predict
+        elif underlying_model_flavor == 'pytorch':
+            model = mlflow.pytorch._load_model(os.path.join(underlying_model_path, 'data'))
+    
     return _load_explainer(explainer_file=shap_explainer_artifacts_path, model=model)
 
 
@@ -514,11 +522,15 @@ def _load_explainer(explainer_file, model = None):
     :param explainer_file: Local filesystem path to the MLflow Model saved with the ``shap`` flavor
     :param model: model to override underlying explainer model.
     """
+    def inject_model_loader(in_file):
+        pickle.load(in_file) # No-Op to move file pointer forward
+        return model
 
     with open(explainer_file, "rb") as explainer:
-        explainer = shap.Explainer.load(explainer)
+        model_loader = None
         if model is not None:
-            explainer.model = shap.models.Model(model.predict)
+            model_loader = inject_model_loader
+        explainer = shap.Explainer.load(explainer, model_loader=model_loader)
         return explainer
 
 class _SHAPWrapper:
@@ -530,7 +542,9 @@ class _SHAPWrapper:
         if underlying_model_flavor != _UNKNOWN_MODEL_FLAVOR:
             underlying_model_path = os.path.join(path, _UNDERLYING_MODEL_SUBPATH)
             if underlying_model_flavor == 'sklearn':
-                model = mlflow.sklearn._load_pyfunc(underlying_model_path)
+                model = mlflow.sklearn._load_pyfunc(underlying_model_path).predict
+            elif underlying_model_flavor == 'pytorch':
+                model = mlflow.pytorch._load_model(os.path.join(underlying_model_path, 'data'))
 
         self.explainer = _load_explainer(explainer_file=shap_explainer_artifacts_path, model=model)
 
