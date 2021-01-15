@@ -29,6 +29,21 @@ test_that("mlflow_start_run()/mlflow_get_run() work properly", {
   )
 })
 
+test_that("a run can be started properly if MLFLOW_RUN_ID is set", {
+  mlflow_clear_test_dir("mlruns")
+  # Typical use case: Invoke an R script that interacts with the MLflow API from
+  # outside of R, e.g. MLproject, Python, CLI
+  start_get_id_stop <- function() {
+    tryCatch(mlflow_id(mlflow_start_run()), finally = {
+      mlflow_end_run()
+    })
+  }
+  id <- start_get_id_stop()
+  withr::with_envvar(list(MLFLOW_RUN_ID = id), {
+    expect_equal(start_get_id_stop(), id)
+  })
+})
+
 test_that("mlflow_end_run() works properly", {
   mlflow_clear_test_dir("mlruns")
   mlflow_start_run()
@@ -48,6 +63,22 @@ test_that("mlflow_end_run() works properly", {
   run_data_names <- c("metrics", "params", "tags")
   expect_setequal(c(run_info_names, run_data_names), names(run))
   expect_true(!anyNA(run[run_info_names]))
+})
+
+test_that("mlflow_start_run()/mlflow_end_run() works properly with nested runs", {
+  mlflow_clear_test_dir("mlruns")
+  runs <- list(
+    mlflow_start_run(),
+    mlflow_start_run(nested = TRUE),
+    mlflow_start_run(nested = TRUE)
+  )
+  client <- mlflow_client()
+  for (i in seq(3, 1, -1)) {
+    expect_equal(mlflow:::mlflow_get_active_run_id(), runs[[i]]$run_uuid)
+    run <- mlflow_end_run(client = client, run_id = runs[[i]]$run_uuid)
+    expect_identical(run$run_uuid, runs[[i]]$run_uuid)
+  }
+  expect_null(mlflow:::mlflow_get_active_run_id())
 })
 
 test_that("mlflow_set_tag() should return NULL invisibly", {
@@ -601,6 +632,10 @@ test_that("mlflow observers receive tracking event callbacks", {
   mlflow_set_experiment(experiment_id = experiment_id)
   expect_equal(length(tracking_events), num_observers)
   for (idx in seq(num_observers)) {
+    expect_equal(
+      tracking_events[[idx]]$create_run[[1]]$run_id,
+      run$run_id
+    )
     expect_equal(
       tracking_events[[idx]]$create_run[[1]]$experiment_id,
       experiment_id
