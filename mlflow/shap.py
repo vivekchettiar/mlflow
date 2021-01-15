@@ -6,8 +6,6 @@ import yaml
 import shap
 
 import numpy as np
-import sklearn
-import torch
 
 import mlflow
 import types
@@ -46,13 +44,27 @@ def get_underlying_model_flavor(model):
     unwrapped_model = model.model
     if isinstance(unwrapped_model, types.FunctionType):
         return 'python_function'
-    elif isinstance(unwrapped_model, types.MethodType):
+    
+    # check if passed model is a method of object
+    if isinstance(unwrapped_model, types.MethodType):
         model_object = unwrapped_model.__self__
-        if issubclass(type(model_object), sklearn.base.BaseEstimator):
-            return 'sklearn'
-    elif issubclass(type(unwrapped_model), torch.nn.Module):
-        return 'pytorch'
-        # TODO: Add checks for other types of mlflow models
+
+        # check if model object is of type sklearn
+        try:
+            import sklearn
+            if issubclass(type(model_object), sklearn.base.BaseEstimator):
+                return 'sklearn'
+        except ImportError:
+            pass
+    
+    # check if passed model is of type pytorch
+    try:
+        import torch
+        if issubclass(type(unwrapped_model), torch.nn.Module):
+            return 'pytorch'
+    except ImportError:
+        pass
+
     return _UNKNOWN_MODEL_FLAVOR
 
 def get_default_conda_env():
