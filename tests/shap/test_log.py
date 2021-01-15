@@ -1,6 +1,5 @@
 import mlflow
 import shap
-import pickle
 import numpy as np
 import sklearn
 from mlflow.utils.environment import _mlflow_conda_env
@@ -99,9 +98,6 @@ def test_pytorch_log_explainer():
     Tests mlflow.shap log_explainer with mlflow serialization of the underlying pytorch model
     """
 
-    import shap
-    import mlflow
-    import torch
     from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
     with mlflow.start_run() as run:
@@ -131,9 +127,6 @@ def test_pytorch_log_explainer_pyfunc():
     Tests mlflow.shap log_explainer with mlflow serialization of the underlying model using pyfunc flavor
     """
 
-    import shap
-    import mlflow
-    import torch
     from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
     import pandas as pd
 
