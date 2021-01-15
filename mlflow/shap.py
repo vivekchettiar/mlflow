@@ -551,7 +551,7 @@ class _SHAPWrapper:
     def predict(self, dataframe):
         explanation_serialized = {}
         shap_values = self.explainer(dataframe.values)
-        explanation_serialized['values'] = shap_values.values
+        explanation_serialized['values'] = shap_values.values.tolist()
         if hasattr(shap_values, 'base_values'):
-            explanation_serialized['base_values'] = shap_values.base_values
+            explanation_serialized['base_values'] = shap_values.base_values.tolist()
         return explanation_serialized
